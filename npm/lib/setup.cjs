@@ -46,9 +46,10 @@ const CLIENTS = [
     id: "codex",
     displayName: "Codex",
     kind: "toml",
-    paths: [".codex/config.toml"],
+    root: codexHome,
+    paths: ["config.toml"],
     skillPath: ".agents/skills/jacobian-math/SKILL.md",
-    detected: (home) => exists(path.join(home, ".codex")),
+    detected: (home) => exists(codexHome(home)),
   },
   {
     id: "cursor",
@@ -81,6 +82,12 @@ const CLIENTS = [
 ];
 
 class SetupError extends Error {}
+
+// Codex reads its configuration from CODEX_HOME when that variable is set.
+function codexHome(home) {
+  const configured = process.env.CODEX_HOME;
+  return configured ? path.resolve(configured) : path.join(home, ".codex");
+}
 
 function exists(candidate) {
   try {
@@ -158,7 +165,8 @@ function detectClients(home) {
 }
 
 function choosePath(client, home) {
-  const candidates = client.paths.map((relative) => path.join(home, relative));
+  const root = client.root ? client.root(home) : home;
+  const candidates = client.paths.map((relative) => path.join(root, relative));
   return candidates.find((candidate) => exists(candidate)) || candidates[0];
 }
 

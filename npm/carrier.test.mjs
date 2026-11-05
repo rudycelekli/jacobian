@@ -19,11 +19,13 @@ async function setupEnvironment(base) {
   await mkdir(bin, { recursive: true });
   await writeFile(join(bin, "uvx"), "#!/bin/sh\nexit 0\n", "utf8");
   await chmod(join(bin, "uvx"), 0o755);
-  return {
+  const env = {
     ...process.env,
     HOME: home,
     PATH: `${bin}:${process.env.PATH}`,
   };
+  delete env.CODEX_HOME;
+  return env;
 }
 
 function runCarrier(args, env) {
@@ -672,6 +674,32 @@ test("setup migrates a Codex inline registration and preserves neighboring table
     assert.match(updated, /^other_inline = \{ command = "other-inline" \}$/m);
     assert.deepEqual(TOML.parse(updated).mcp_servers.other_inline, { command: "other-inline" });
     assert.doesNotMatch(updated, /^jacobian =/m);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("setup writes the Codex registration under CODEX_HOME", async () => {
+  const base = await mkdtemp(join(tmpdir(), "jacobian-carrier-setup-codex-home-"));
+  try {
+    const env = await setupEnvironment(base);
+    env.CODEX_HOME = join(base, "codex-home");
+    const configPath = join(env.CODEX_HOME, "config.toml");
+    await mkdir(env.CODEX_HOME, { recursive: true });
+    await writeFile(configPath, `model = "o3"\n`, "utf8");
+
+    const plan = runCarrier(["setup", "--codex", "--dry-run", "--json"], env);
+    assert.equal(plan.status, 0, plan.stderr);
+    const [planned] = JSON.parse(plan.stdout).clients;
+    assert.equal(planned.path, configPath);
+    assert.equal(planned.detected, true);
+
+    const result = runCarrier(["setup", "--codex", "--yes", "--json"], env);
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = TOML.parse(await readFile(configPath, "utf8"));
+    assert.equal(parsed.model, "o3");
+    assert.equal(parsed.mcp_servers.jacobian.args[1], `jacobian@${packageMetadata.version}`);
+    await assert.rejects(readFile(join(env.HOME, ".codex", "config.toml")), { code: "ENOENT" });
   } finally {
     await rm(base, { recursive: true, force: true });
   }
