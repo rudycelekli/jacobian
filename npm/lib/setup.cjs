@@ -33,14 +33,10 @@ const CLIENTS = [
     displayName: "OpenCode",
     kind: "opencode",
     section: "mcp",
-    paths: [
-      ".config/opencode/opencode.json",
-      ".config/opencode/opencode.jsonc",
-      ".config/opencode/.opencode.json",
-      ".config/opencode/.opencode.jsonc",
-    ],
+    root: openCodeConfigHome,
+    paths: ["opencode.json", "opencode.jsonc", ".opencode.json", ".opencode.jsonc"],
     skillPath: ".agents/skills/jacobian-math/SKILL.md",
-    detected: (home) => exists(path.join(home, ".config/opencode")),
+    detected: (home) => exists(openCodeConfigHome(home)),
   },
   {
     id: "codex",
@@ -81,6 +77,13 @@ const CLIENTS = [
 ];
 
 class SetupError extends Error {}
+
+// OpenCode reads its global configuration from the XDG configuration directory.
+function openCodeConfigHome(home) {
+  const configured = process.env.XDG_CONFIG_HOME;
+  const base = configured && path.isAbsolute(configured) ? configured : path.join(home, ".config");
+  return path.join(base, "opencode");
+}
 
 function exists(candidate) {
   try {
@@ -158,7 +161,8 @@ function detectClients(home) {
 }
 
 function choosePath(client, home) {
-  const candidates = client.paths.map((relative) => path.join(home, relative));
+  const root = client.root ? client.root(home) : home;
+  const candidates = client.paths.map((relative) => path.join(root, relative));
   return candidates.find((candidate) => exists(candidate)) || candidates[0];
 }
 
